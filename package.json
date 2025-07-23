@@ -10,9 +10,7 @@
     "generate": "nuxt generate",
     "preview": "nuxt preview",
     "lint": "eslint .",
-    "lint:fix": "eslint . --fix",
-    "format": "prettier .",
-    "format:write": "prettier --write ."
+    "lint:fix": "eslint . --fix"
   },
   "dependencies": {
     "@pinia/nuxt": "*",
@@ -22,9 +20,7 @@
     "@antfu/eslint-config": "*",
     "@nuxtjs/tailwindcss": "*",
     "eslint": "*",
-    "eslint-config-prettier": "*",
     "nuxt": "3.17.7",
-    "prettier": "*",
     "typescript": "*"
   }
 }
