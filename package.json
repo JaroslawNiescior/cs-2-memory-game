@@ -1,0 +1,30 @@
+{
+  "name": "cs-2-memory-game",
+  "version": "",
+  "description": "description",
+  "author": "Jarosław Nieściór <jaroslaw.niescior@binarapps.com>",
+  "license": "MIT",
+  "scripts": {
+    "build": "nuxt build",
+    "dev": "nuxt dev",
+    "generate": "nuxt generate",
+    "preview": "nuxt preview",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "format": "prettier .",
+    "format:write": "prettier --write ."
+  },
+  "dependencies": {
+    "@pinia/nuxt": "*",
+    "pinia": "*"
+  },
+  "devDependencies": {
+    "@antfu/eslint-config": "*",
+    "@nuxtjs/tailwindcss": "*",
+    "eslint": "*",
+    "eslint-config-prettier": "*",
+    "nuxt": "3.17.7",
+    "prettier": "*",
+    "typescript": "*"
+  }
+}
