@@ -3,7 +3,7 @@
 
 <template>
   <div>
-    <NuxtWelcome />
+    <GameBoard3D />
   </div>
 </template>
 
