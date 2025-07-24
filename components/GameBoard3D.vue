@@ -2,11 +2,17 @@
 import type { CS2Skin, GameCard } from '~/types/game'
 import * as THREE from 'three'
 
-const BOARD_SIZE = 4
 const CARD_WIDTH = 1.5
 const CARD_HEIGHT = 2
 const CARD_SPACING = 0.3
 const FLIP_DURATION = 0.5
+
+// Poziomy trudności
+const DIFFICULTY_LEVELS = {
+  easy: { name: 'Easy (3x4)', rows: 3, cols: 4, pairs: 6 },
+  medium: { name: 'Medium (4x5)', rows: 4, cols: 5, pairs: 10 },
+  hard: { name: 'Hard (5x6)', rows: 5, cols: 6, pairs: 15 },
+}
 
 const cards = ref<GameCard[]>([])
 const flippedCards = ref<GameCard[]>([])
@@ -15,6 +21,7 @@ const moves = ref(0)
 const matches = ref(0)
 const isLoading = ref(true)
 const gameReady = ref(false)
+const currentDifficulty = ref<keyof typeof DIFFICULTY_LEVELS>('easy')
 
 const containerRef = ref<HTMLDivElement>()
 let scene: THREE.Scene
@@ -43,8 +50,10 @@ async function createSkinTexture(imageUrl: string): Promise<THREE.Texture> {
       (texture) => {
         texture.wrapS = THREE.ClampToEdgeWrapping
         texture.wrapT = THREE.ClampToEdgeWrapping
-        texture.minFilter = THREE.LinearFilter
+        texture.minFilter = THREE.LinearMipmapLinearFilter
         texture.magFilter = THREE.LinearFilter
+        texture.generateMipmaps = true
+        texture.anisotropy = renderer.capabilities.getMaxAnisotropy()
         resolve(texture)
       },
       undefined,
@@ -58,20 +67,20 @@ async function createSkinTexture(imageUrl: string): Promise<THREE.Texture> {
 
 function createFallbackTexture(skinName: string): THREE.Texture {
   const canvas = document.createElement('canvas')
-  canvas.width = 256
-  canvas.height = 256
+  canvas.width = 512 // Zwiększona rozdzielczość
+  canvas.height = 512
   const context = canvas.getContext('2d')!
 
   // Gradient tło
-  const gradient = context.createLinearGradient(0, 0, 256, 256)
+  const gradient = context.createLinearGradient(0, 0, 512, 512)
   gradient.addColorStop(0, '#4F46E5')
   gradient.addColorStop(1, '#7C3AED')
   context.fillStyle = gradient
-  context.fillRect(0, 0, 256, 256)
+  context.fillRect(0, 0, 512, 512)
 
   // Tekst z nazwą skórki
   context.fillStyle = '#FFFFFF'
-  context.font = 'bold 16px Arial'
+  context.font = 'bold 24px Arial' // Większa czcionka
   context.textAlign = 'center'
   context.textBaseline = 'middle'
 
@@ -94,11 +103,11 @@ function createFallbackTexture(skinName: string): THREE.Texture {
     lines.push(currentLine)
 
   // Rysuj linie tekstu
-  const lineHeight = 20
-  const startY = 128 - ((lines.length - 1) * lineHeight) / 2
+  const lineHeight = 30 // Większa wysokość linii
+  const startY = 256 - ((lines.length - 1) * lineHeight) / 2
 
   lines.forEach((line, index) => {
-    context.fillText(line, 128, startY + index * lineHeight)
+    context.fillText(line, 256, startY + index * lineHeight)
   })
 
   const texture = new THREE.CanvasTexture(canvas)
@@ -108,26 +117,34 @@ function createFallbackTexture(skinName: string): THREE.Texture {
 
 function createBackTexture(): THREE.Texture {
   const canvas = document.createElement('canvas')
-  canvas.width = 256
-  canvas.height = 256
+  canvas.width = 512 // Zwiększona rozdzielczość
+  canvas.height = 512
   const context = canvas.getContext('2d')!
 
-  const gradient = context.createLinearGradient(0, 0, 256, 256)
+  const gradient = context.createLinearGradient(0, 0, 512, 512)
   gradient.addColorStop(0, '#3B82F6')
   gradient.addColorStop(1, '#1E40AF')
   context.fillStyle = gradient
-  context.fillRect(0, 0, 256, 256)
+  context.fillRect(0, 0, 512, 512)
 
+  // Wzór siatki
   context.strokeStyle = '#60A5FA'
-  context.lineWidth = 4
-  for (let i = 0; i < 256; i += 32) {
+  context.lineWidth = 6 // Grubsze linie
+  for (let i = 0; i < 512; i += 64) { // Większy wzór
     context.beginPath()
     context.moveTo(i, 0)
-    context.lineTo(i + 32, 32)
-    context.moveTo(i + 32, 0)
-    context.lineTo(i, 32)
+    context.lineTo(i + 64, 64)
+    context.moveTo(i + 64, 0)
+    context.lineTo(i, 64)
     context.stroke()
   }
+
+  // Dodaj logo/tekst CS:GO
+  context.fillStyle = '#FFFFFF'
+  context.font = 'bold 48px Arial'
+  context.textAlign = 'center'
+  context.textBaseline = 'middle'
+  context.fillText('CS:GO', 256, 256)
 
   const texture = new THREE.CanvasTexture(canvas)
   texture.needsUpdate = true
@@ -142,26 +159,46 @@ function initThree() {
   scene.background = new THREE.Color(COLORS.background)
 
   camera = new THREE.PerspectiveCamera(
-    75,
+    60, // Mniejszy FOV dla mniej zniekształceń
     containerRef.value.clientWidth / containerRef.value.clientHeight,
     0.1,
     1000,
   )
-  camera.position.set(0, 0, 8)
 
-  renderer = new THREE.WebGLRenderer({ antialias: true })
+  // Dostosuj pozycję kamery do rozmiaru planszy
+  const difficulty = DIFFICULTY_LEVELS[currentDifficulty.value]
+  const maxDimension = Math.max(difficulty.rows, difficulty.cols)
+  const cameraDistance = 8 + maxDimension * 0.5 // Dynamiczna odległość kamery
+  camera.position.set(0, 0, cameraDistance)
+
+  renderer = new THREE.WebGLRenderer({
+    antialias: true,
+    alpha: false,
+    powerPreference: 'high-performance',
+  })
   renderer.setSize(containerRef.value.clientWidth, containerRef.value.clientHeight)
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2)) // Lepsze DPI
   renderer.shadowMap.enabled = true
   renderer.shadowMap.type = THREE.PCFSoftShadowMap
+  renderer.outputColorSpace = THREE.SRGBColorSpace // Poprawne kolory
   containerRef.value.appendChild(renderer.domElement)
 
-  const ambientLight = new THREE.AmbientLight(0xFFFFFF, 0.6)
+  // Lepsze oświetlenie dla wyraźniejszych tekstur
+  const ambientLight = new THREE.AmbientLight(0xFFFFFF, 0.8) // Więcej światła otoczenia
   scene.add(ambientLight)
 
-  const directionalLight = new THREE.DirectionalLight(0xFFFFFF, 0.8)
+  const directionalLight = new THREE.DirectionalLight(0xFFFFFF, 1.0) // Jaśniejsze światło kierunkowe
   directionalLight.position.set(5, 5, 5)
   directionalLight.castShadow = true
+  // Poprawione ustawienia cieni
+  directionalLight.shadow.mapSize.width = 2048
+  directionalLight.shadow.mapSize.height = 2048
   scene.add(directionalLight)
+
+  // Dodatkowe światło z przodu dla lepszej widoczności
+  const frontLight = new THREE.DirectionalLight(0xFFFFFF, 0.5)
+  frontLight.position.set(0, 0, 5)
+  scene.add(frontLight)
 
   raycaster = new THREE.Raycaster()
   mouse = new THREE.Vector2()
@@ -175,24 +212,31 @@ function initThree() {
 function createCard(card: GameCard, x: number, y: number): THREE.Mesh {
   const geometry = new THREE.BoxGeometry(CARD_WIDTH, CARD_HEIGHT, 0.1)
 
-  const frontMaterial = new THREE.MeshLambertMaterial({
+  // Używamy MeshPhongMaterial dla lepszej jakości
+  const frontMaterial = new THREE.MeshPhongMaterial({
     map: card.frontTexture,
+    shininess: 30,
+    specular: 0x111111,
   })
-  const backMaterial = new THREE.MeshLambertMaterial({
+  const backMaterial = new THREE.MeshPhongMaterial({
     map: card.backTexture,
+    shininess: 30,
+    specular: 0x111111,
   })
 
   const materials = [
-    new THREE.MeshLambertMaterial({ color: COLORS.cardBack }),
-    new THREE.MeshLambertMaterial({ color: COLORS.cardBack }),
-    new THREE.MeshLambertMaterial({ color: COLORS.cardBack }),
-    new THREE.MeshLambertMaterial({ color: COLORS.cardBack }),
-    frontMaterial,
-    backMaterial,
+    new THREE.MeshPhongMaterial({ color: COLORS.cardBack }), // prawy bok (index 0)
+    new THREE.MeshPhongMaterial({ color: COLORS.cardBack }), // lewy bok (index 1)
+    new THREE.MeshPhongMaterial({ color: COLORS.cardBack }), // góra (index 2)
+    new THREE.MeshPhongMaterial({ color: COLORS.cardBack }), // dół (index 3)
+    backMaterial, // przód - rewers z napisem CS:GO (index 4) - TO widać na początku
+    frontMaterial, // tył - awers z obrazkiem (index 5) - TO widać po obróceniu
   ]
 
   const mesh = new THREE.Mesh(geometry, materials)
   mesh.position.set(x, y, 0)
+  // Początkowo karty pokazują rewers (pozycja początkowa 0)
+  mesh.rotation.y = 0 // Pokazuj rewers na początku
   mesh.castShadow = true
   mesh.receiveShadow = true
   mesh.userData = { card }
@@ -210,9 +254,11 @@ async function initializeGame() {
     scene.remove(child)
   })
 
+  const difficulty = DIFFICULTY_LEVELS[currentDifficulty.value]
+
   try {
-    // Pobierz 8 losowych skórek CS:GO (dla 8 par)
-    const skins = await fetchRandomSkins(8)
+    // Pobierz wymaganą liczbę losowych skórek CS:GO
+    const skins = await fetchRandomSkins(difficulty.pairs)
 
     if (skins.length === 0) {
       throw new Error('Nie udało się pobrać skórek CS:GO')
@@ -240,13 +286,13 @@ async function initializeGame() {
 
     cards.value = await Promise.all(cardPromises)
 
-    // Rozmieść karty na planszy
-    const startX = -((BOARD_SIZE - 1) * (CARD_WIDTH + CARD_SPACING)) / 2
-    const startY = ((BOARD_SIZE - 1) * (CARD_HEIGHT + CARD_SPACING)) / 2
+    // Rozmieść karty na planszy z uwzględnieniem trudności
+    const startX = -((difficulty.cols - 1) * (CARD_WIDTH + CARD_SPACING)) / 2
+    const startY = ((difficulty.rows - 1) * (CARD_HEIGHT + CARD_SPACING)) / 2
 
     cards.value.forEach((card, index) => {
-      const row = Math.floor(index / BOARD_SIZE)
-      const col = index % BOARD_SIZE
+      const row = Math.floor(index / difficulty.cols)
+      const col = index % difficulty.cols
       const x = startX + col * (CARD_WIDTH + CARD_SPACING)
       const y = startY - row * (CARD_HEIGHT + CARD_SPACING)
 
@@ -274,8 +320,12 @@ async function initializeGame() {
 
 // Fallback gra z prostymi teksturami
 async function initializeFallbackGame() {
-  const fallbackValues = ['AK-47', 'M4A4', 'AWP', 'Glock-18', 'Desert Eagle', 'P90', 'Famas', 'MP7']
-  const cardValues = [...fallbackValues, ...fallbackValues]
+  const difficulty = DIFFICULTY_LEVELS[currentDifficulty.value]
+  const fallbackValues = ['AK-47', 'M4A4', 'AWP', 'Glock-18', 'Desert Eagle', 'P90', 'Famas', 'MP7', 'M4A1-S', 'USP-S', 'Tec-9', 'Five-SeveN', 'P250', 'CZ75-Auto', 'Dual Berettas']
+
+  // Wybierz wymaganą liczbę unikalnych wartości
+  const selectedValues = fallbackValues.slice(0, difficulty.pairs)
+  const cardValues = [...selectedValues, ...selectedValues]
   const shuffledValues = cardValues.sort(() => Math.random() - 0.5)
 
   const cardPromises = shuffledValues.map(async (value, index) => {
@@ -314,13 +364,13 @@ async function initializeFallbackGame() {
 
   cards.value = await Promise.all(cardPromises)
 
-  // Rozmieść karty na planszy (tak samo jak w głównej funkcji)
-  const startX = -((BOARD_SIZE - 1) * (CARD_WIDTH + CARD_SPACING)) / 2
-  const startY = ((BOARD_SIZE - 1) * (CARD_HEIGHT + CARD_SPACING)) / 2
+  // Rozmieść karty na planszy z uwzględnieniem trudności
+  const startX = -((difficulty.cols - 1) * (CARD_WIDTH + CARD_SPACING)) / 2
+  const startY = ((difficulty.rows - 1) * (CARD_HEIGHT + CARD_SPACING)) / 2
 
   cards.value.forEach((card, index) => {
-    const row = Math.floor(index / BOARD_SIZE)
-    const col = index % BOARD_SIZE
+    const row = Math.floor(index / difficulty.cols)
+    const col = index % difficulty.cols
     const x = startX + col * (CARD_WIDTH + CARD_SPACING)
     const y = startY - row * (CARD_HEIGHT + CARD_SPACING)
 
@@ -355,7 +405,7 @@ function flipCardAnimation(card: GameCard, showFront: boolean) {
       if (card.isMatched && progress > 0.5) {
         const materials = card.mesh.material as THREE.Material[]
         materials.forEach((material) => {
-          if (material instanceof THREE.MeshLambertMaterial) {
+          if (material instanceof THREE.MeshPhongMaterial) {
             material.color.setHex(COLORS.matched)
           }
         })
@@ -393,8 +443,8 @@ function flipCard(card: GameCard) {
         flippedCards.value = []
         isGameLocked.value = false
 
-        // Sprawdź czy gra została ukończona (8 par)
-        if (matches.value === 8) {
+        // Sprawdź czy gra została ukończona
+        if (matches.value === DIFFICULTY_LEVELS[currentDifficulty.value].pairs) {
           setTimeout(() => {
             // eslint-disable-next-line no-alert
             alert(`Gratulacje! Ukończyłeś grę w ${moves.value} ruchach!`)
@@ -449,12 +499,18 @@ function onWindowResize() {
 function animate() {
   animationId = requestAnimationFrame(animate)
 
-  scene.rotation.y += 0.0001
+  // Usunięte obracanie sceny - scena jest teraz statyczna
+  // scene.rotation.y += 0.0001
 
   renderer.render(scene, camera)
 }
 
 function restartGame() {
+  initializeGame()
+}
+
+function changeDifficulty(newDifficulty: keyof typeof DIFFICULTY_LEVELS) {
+  currentDifficulty.value = newDifficulty
   initializeGame()
 }
 
@@ -483,6 +539,23 @@ onMounted(() => {
       <h1 class="game-title">
         Memory Game 3D
       </h1>
+
+      <!-- Wybór poziomu trudności -->
+      <div class="difficulty-selector">
+        <h3>Poziom trudności:</h3>
+        <div class="difficulty-buttons">
+          <button
+            v-for="(level, key) in DIFFICULTY_LEVELS"
+            :key="key"
+            class="difficulty-btn"
+            :class="{ active: currentDifficulty === key }"
+            @click="changeDifficulty(key)"
+          >
+            {{ level.name }}
+          </button>
+        </div>
+      </div>
+
       <div class="mb-6 flex justify-center space-x-8 text-white">
         <div class="stat">
           <span class="stat-label">Ruchy:</span>
@@ -490,7 +563,7 @@ onMounted(() => {
         </div>
         <div class="stat">
           <span class="stat-label">Pary:</span>
-          <span class="stat-value">{{ matches }}/8</span>
+          <span class="stat-value">{{ matches }}/{{ DIFFICULTY_LEVELS[currentDifficulty].pairs }}</span>
         </div>
       </div>
       <button class="restart-btn" @click="restartGame">
@@ -498,13 +571,13 @@ onMounted(() => {
       </button>
     </div>
 
-    <div class="game-board">
+    <div class="game-board" :class="`difficulty-${currentDifficulty}`">
       <div ref="containerRef" class="three-container" />
     </div>
 
     <div class="game-instructions">
       <p>Kliknij na karty, aby je odkryć. Znajdź wszystkie pary!</p>
-      <p>Użyj myszy aby obracać widok.</p>
+      <p>Karty pokażą prawdziwe skiny CS:GO po odkryciu.</p>
     </div>
   </div>
 </template>
@@ -530,6 +603,48 @@ onMounted(() => {
   font-size: 3rem;
   margin-bottom: 1rem;
   text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.3);
+}
+
+.difficulty-selector {
+  margin-bottom: 2rem;
+}
+
+.difficulty-selector h3 {
+  margin-bottom: 1rem;
+  font-size: 1.2rem;
+  color: white;
+}
+
+.difficulty-buttons {
+  display: flex;
+  gap: 1rem;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+.difficulty-btn {
+  background: rgba(255, 255, 255, 0.2);
+  color: white;
+  border: 2px solid transparent;
+  padding: 0.5rem 1rem;
+  border-radius: 0.5rem;
+  font-size: 0.9rem;
+  font-weight: bold;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  backdrop-filter: blur(10px);
+  min-width: 100px;
+}
+
+.difficulty-btn:hover {
+  background: rgba(255, 255, 255, 0.3);
+  transform: translateY(-2px);
+}
+
+.difficulty-btn.active {
+  background: #10b981;
+  border-color: #059669;
+  box-shadow: 0 4px 8px rgba(16, 185, 129, 0.3);
 }
 
 .game-stats {
@@ -590,6 +705,23 @@ onMounted(() => {
   border-radius: 0.5rem;
   overflow: hidden;
   cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+/* Dostosuj rozmiar kontenera do poziomu trudności */
+.difficulty-easy .three-container {
+  width: 600px;
+  height: 500px;
+}
+
+.difficulty-medium .three-container {
+  width: 800px;
+  height: 600px;
+}
+
+.difficulty-hard .three-container {
+  width: 1000px;
+  height: 700px;
 }
 
 .game-instructions {
