@@ -1,47 +1,7 @@
-interface CS2_Skin {
-  id: string
-  name: string
-  description: string
-  weapon: {
-    id: string
-    name: string
-  }
-  category: {
-    id: string
-    name: string
-  }
-  pattern: {
-    id: string
-    name: string
-  }
-  min_float: number
-  max_float: number
-  rarity: {
-    id: string
-    name: string
-    color: string
-  }
-  stattrak: boolean
-  souvenir: boolean
-  image: string
-  team: {
-    id: string
-    name: string
-  } | null
-  crates: Array<{
-    id: string
-    name: string
-    image: string
-  }>
-  collections: Array<{
-    id: string
-    name: string
-    image: string
-  }>
-}
+import type { CS2Skin } from '~/types/game'
 
 interface CachedData {
-  allSkins: CS2_Skin[]
+  allSkins: CS2Skin[]
   timestamp: number
 }
 
@@ -51,7 +11,7 @@ const CACHE_DURATION = 60 * 60 * 1000
 const CSGO_API_BASE = 'https://bymykel.github.io/CSGO-API/api/en'
 const ALL_SKINS_CACHE_KEY = 'all_skins'
 
-async function fetchAllSkins(): Promise<CS2_Skin[]> {
+async function fetchAllSkins(): Promise<CS2Skin[]> {
   try {
     const response = await fetch(`${CSGO_API_BASE}/skins.json`)
     if (!response.ok) {
@@ -65,7 +25,7 @@ async function fetchAllSkins(): Promise<CS2_Skin[]> {
   }
 }
 
-async function getCachedOrFetchAllSkins(): Promise<CS2_Skin[]> {
+async function getCachedOrFetchAllSkins(): Promise<CS2Skin[]> {
   const cachedData = cache.get(ALL_SKINS_CACHE_KEY)
 
   if (cachedData && isCacheValid(cachedData)) {
@@ -83,12 +43,12 @@ async function getCachedOrFetchAllSkins(): Promise<CS2_Skin[]> {
   return allSkins
 }
 
-function getRandomSkins(skins: CS2_Skin[], count: number = 10): CS2_Skin[] {
+function getRandomSkins(skins: CS2Skin[], count: number = 10): CS2Skin[] {
   const validSkins = skins.filter(skin => skin.image && skin.image.length > 0)
 
-  const skinsByWeapon = new Map<string, CS2_Skin[]>()
+  const skinsByWeapon = new Map<string, CS2Skin[]>()
 
-  validSkins.forEach((skin: CS2_Skin) => {
+  validSkins.forEach((skin: CS2Skin) => {
     const weaponId = skin.weapon.id
     if (!skinsByWeapon.has(weaponId)) {
       skinsByWeapon.set(weaponId, [])
@@ -96,7 +56,7 @@ function getRandomSkins(skins: CS2_Skin[], count: number = 10): CS2_Skin[] {
     skinsByWeapon.get(weaponId)!.push(skin)
   })
 
-  const uniqueWeaponSkins: CS2_Skin[] = []
+  const uniqueWeaponSkins: CS2Skin[] = []
   const weaponIds = Array.from(skinsByWeapon.keys())
 
   const shuffledWeaponIds = weaponIds.sort(() => 0.5 - Math.random())

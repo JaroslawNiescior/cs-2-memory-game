@@ -1,15 +1,6 @@
 <script setup lang="ts">
+import type { CS2Skin, GameCard } from '~/types/game'
 import * as THREE from 'three'
-
-interface Card {
-  id: number
-  value: string
-  isFlipped: boolean
-  isMatched: boolean
-  mesh?: THREE.Mesh
-  frontTexture?: THREE.Texture
-  backTexture?: THREE.Texture
-}
 
 const BOARD_SIZE = 4
 const CARD_WIDTH = 1.5
@@ -17,11 +8,13 @@ const CARD_HEIGHT = 2
 const CARD_SPACING = 0.3
 const FLIP_DURATION = 0.5
 
-const cards = ref<Card[]>([])
-const flippedCards = ref<Card[]>([])
+const cards = ref<GameCard[]>([])
+const flippedCards = ref<GameCard[]>([])
 const isGameLocked = ref(false)
 const moves = ref(0)
 const matches = ref(0)
+const isLoading = ref(true)
+const gameReady = ref(false)
 
 const containerRef = ref<HTMLDivElement>()
 let scene: THREE.Scene
@@ -31,7 +24,7 @@ let raycaster: THREE.Raycaster
 let mouse: THREE.Vector2
 let animationId: number
 
-const CARD_VALUES = ['🐶', '🐱', '🐭', '🐹', '🐰', '🦊', '🐻', '🐼']
+const { fetchRandomSkins } = useCS2Skins()
 
 const COLORS = {
   cardBack: 0x3B82F6,
@@ -40,20 +33,73 @@ const COLORS = {
   background: 0x1A1A2E,
 }
 
-function createEmojiTexture(emoji: string): THREE.Texture {
+async function createSkinTexture(imageUrl: string): Promise<THREE.Texture> {
+  return new Promise((resolve) => {
+    const loader = new THREE.TextureLoader()
+    loader.setCrossOrigin('anonymous')
+
+    loader.load(
+      imageUrl,
+      (texture) => {
+        texture.wrapS = THREE.ClampToEdgeWrapping
+        texture.wrapT = THREE.ClampToEdgeWrapping
+        texture.minFilter = THREE.LinearFilter
+        texture.magFilter = THREE.LinearFilter
+        resolve(texture)
+      },
+      undefined,
+      (error) => {
+        console.error('Error loading skin texture:', error)
+        resolve(createFallbackTexture(imageUrl))
+      },
+    )
+  })
+}
+
+function createFallbackTexture(skinName: string): THREE.Texture {
   const canvas = document.createElement('canvas')
   canvas.width = 256
   canvas.height = 256
   const context = canvas.getContext('2d')!
 
-  context.fillStyle = '#F3F4F6'
+  // Gradient tło
+  const gradient = context.createLinearGradient(0, 0, 256, 256)
+  gradient.addColorStop(0, '#4F46E5')
+  gradient.addColorStop(1, '#7C3AED')
+  context.fillStyle = gradient
   context.fillRect(0, 0, 256, 256)
 
-  context.font = '120px Arial'
+  // Tekst z nazwą skórki
+  context.fillStyle = '#FFFFFF'
+  context.font = 'bold 16px Arial'
   context.textAlign = 'center'
   context.textBaseline = 'middle'
-  context.fillStyle = '#1F2937'
-  context.fillText(emoji, 128, 128)
+
+  // Podziel długą nazwę na linie
+  const words = skinName.split(' ')
+  const lines = []
+  let currentLine = ''
+
+  for (const word of words) {
+    const testLine = currentLine + (currentLine ? ' ' : '') + word
+    if (testLine.length > 20 && currentLine) {
+      lines.push(currentLine)
+      currentLine = word
+    }
+    else {
+      currentLine = testLine
+    }
+  }
+  if (currentLine)
+    lines.push(currentLine)
+
+  // Rysuj linie tekstu
+  const lineHeight = 20
+  const startY = 128 - ((lines.length - 1) * lineHeight) / 2
+
+  lines.forEach((line, index) => {
+    context.fillText(line, 128, startY + index * lineHeight)
+  })
 
   const texture = new THREE.CanvasTexture(canvas)
   texture.needsUpdate = true
@@ -126,7 +172,7 @@ function initThree() {
   animate()
 }
 
-function createCard(card: Card, x: number, y: number): THREE.Mesh {
+function createCard(card: GameCard, x: number, y: number): THREE.Mesh {
   const geometry = new THREE.BoxGeometry(CARD_WIDTH, CARD_HEIGHT, 0.1)
 
   const frontMaterial = new THREE.MeshLambertMaterial({
@@ -154,24 +200,121 @@ function createCard(card: Card, x: number, y: number): THREE.Mesh {
   return mesh
 }
 
-function initializeGame() {
-  const cardsToRemove = scene.children.filter(child => child.userData.card)
-  cardsToRemove.forEach((child) => {
+async function initializeGame() {
+  isLoading.value = true
+  gameReady.value = false
+
+  // Wyczyść scenę z poprzednich kart
+  const cardsToRemove = scene.children.filter((child: THREE.Object3D) => child.userData.card)
+  cardsToRemove.forEach((child: THREE.Object3D) => {
     scene.remove(child)
   })
 
-  const cardValues = [...CARD_VALUES, ...CARD_VALUES]
+  try {
+    // Pobierz 8 losowych skórek CS:GO (dla 8 par)
+    const skins = await fetchRandomSkins(8)
+
+    if (skins.length === 0) {
+      throw new Error('Nie udało się pobrać skórek CS:GO')
+    }
+
+    // Stwórz pary kart z skórek
+    const cardPairs: CS2Skin[] = [...skins, ...skins]
+    const shuffledSkins = cardPairs.sort(() => Math.random() - 0.5)
+
+    // Stwórz karty z teksturami
+    const cardPromises = shuffledSkins.map(async (skin, index) => {
+      const frontTexture = await createSkinTexture(skin.image)
+      const backTexture = createBackTexture()
+
+      return {
+        id: index,
+        value: skin.name,
+        skin,
+        isFlipped: false,
+        isMatched: false,
+        frontTexture,
+        backTexture,
+      }
+    })
+
+    cards.value = await Promise.all(cardPromises)
+
+    // Rozmieść karty na planszy
+    const startX = -((BOARD_SIZE - 1) * (CARD_WIDTH + CARD_SPACING)) / 2
+    const startY = ((BOARD_SIZE - 1) * (CARD_HEIGHT + CARD_SPACING)) / 2
+
+    cards.value.forEach((card, index) => {
+      const row = Math.floor(index / BOARD_SIZE)
+      const col = index % BOARD_SIZE
+      const x = startX + col * (CARD_WIDTH + CARD_SPACING)
+      const y = startY - row * (CARD_HEIGHT + CARD_SPACING)
+
+      const mesh = createCard(card, x, y)
+      card.mesh = mesh
+      scene.add(mesh)
+    })
+
+    // Reset statystyk
+    flippedCards.value = []
+    isGameLocked.value = false
+    moves.value = 0
+    matches.value = 0
+    gameReady.value = true
+  }
+  catch (error) {
+    console.error('Błąd podczas inicjalizacji gry:', error)
+    // Fallback - użyj domyślnych wartości jeśli API nie działa
+    await initializeFallbackGame()
+  }
+  finally {
+    isLoading.value = false
+  }
+}
+
+// Fallback gra z prostymi teksturami
+async function initializeFallbackGame() {
+  const fallbackValues = ['AK-47', 'M4A4', 'AWP', 'Glock-18', 'Desert Eagle', 'P90', 'Famas', 'MP7']
+  const cardValues = [...fallbackValues, ...fallbackValues]
   const shuffledValues = cardValues.sort(() => Math.random() - 0.5)
 
-  cards.value = shuffledValues.map((value, index) => ({
-    id: index,
-    value,
-    isFlipped: false,
-    isMatched: false,
-    frontTexture: createEmojiTexture(value),
-    backTexture: createBackTexture(),
-  }))
+  const cardPromises = shuffledValues.map(async (value, index) => {
+    const frontTexture = createFallbackTexture(value)
+    const backTexture = createBackTexture()
 
+    // Stwórz dummy skin object
+    const dummySkin: CS2Skin = {
+      id: `fallback-${index}`,
+      name: value,
+      description: `Fallback ${value}`,
+      weapon: { id: `weapon-${index}`, name: value },
+      category: { id: 'fallback', name: 'Fallback' },
+      pattern: { id: 'fallback', name: 'Fallback' },
+      min_float: 0,
+      max_float: 1,
+      rarity: { id: 'common', name: 'Common', color: '#FFFFFF' },
+      stattrak: false,
+      souvenir: false,
+      image: '',
+      team: null,
+      crates: [],
+      collections: [],
+    }
+
+    return {
+      id: index,
+      value,
+      skin: dummySkin,
+      isFlipped: false,
+      isMatched: false,
+      frontTexture,
+      backTexture,
+    }
+  })
+
+  cards.value = await Promise.all(cardPromises)
+
+  // Rozmieść karty na planszy (tak samo jak w głównej funkcji)
   const startX = -((BOARD_SIZE - 1) * (CARD_WIDTH + CARD_SPACING)) / 2
   const startY = ((BOARD_SIZE - 1) * (CARD_HEIGHT + CARD_SPACING)) / 2
 
@@ -190,9 +333,10 @@ function initializeGame() {
   isGameLocked.value = false
   moves.value = 0
   matches.value = 0
+  gameReady.value = true
 }
 
-function flipCardAnimation(card: Card, showFront: boolean) {
+function flipCardAnimation(card: GameCard, showFront: boolean) {
   if (!card.mesh)
     return
 
@@ -226,7 +370,7 @@ function flipCardAnimation(card: Card, showFront: boolean) {
   animate()
 }
 
-function flipCard(card: Card) {
+function flipCard(card: GameCard) {
   if (card.isFlipped || card.isMatched)
     return
 
@@ -241,14 +385,16 @@ function flipCard(card: Card) {
     const [firstCard, secondCard] = flippedCards.value
 
     setTimeout(() => {
-      if (firstCard.value === secondCard.value) {
+      if (firstCard.skin.id === secondCard.skin.id) {
+        // Para znaleziona!
         firstCard.isMatched = true
         secondCard.isMatched = true
         matches.value++
         flippedCards.value = []
         isGameLocked.value = false
 
-        if (matches.value === CARD_VALUES.length) {
+        // Sprawdź czy gra została ukończona (8 par)
+        if (matches.value === 8) {
           setTimeout(() => {
             // eslint-disable-next-line no-alert
             alert(`Gratulacje! Ukończyłeś grę w ${moves.value} ruchach!`)
@@ -256,6 +402,7 @@ function flipCard(card: Card) {
         }
       }
       else {
+        // Nie para - odwróć karty z powrotem
         setTimeout(() => {
           firstCard.isFlipped = false
           secondCard.isFlipped = false
@@ -282,7 +429,7 @@ function onMouseClick(event: MouseEvent) {
 
   if (intersects.length > 0) {
     const clickedMesh = intersects[0].object as THREE.Mesh
-    const card = clickedMesh.userData.card as Card
+    const card = clickedMesh.userData.card as GameCard
 
     if (card && !card.isFlipped && !card.isMatched) {
       flipCard(card)
@@ -336,14 +483,14 @@ onMounted(() => {
       <h1 class="game-title">
         Memory Game 3D
       </h1>
-      <div class="game-stats">
+      <div class="mb-6 flex justify-center space-x-8 text-white">
         <div class="stat">
           <span class="stat-label">Ruchy:</span>
           <span class="stat-value">{{ moves }}</span>
         </div>
         <div class="stat">
           <span class="stat-label">Pary:</span>
-          <span class="stat-value">{{ matches }}/{{ CARD_VALUES.length }}</span>
+          <span class="stat-value">{{ matches }}/8</span>
         </div>
       </div>
       <button class="restart-btn" @click="restartGame">

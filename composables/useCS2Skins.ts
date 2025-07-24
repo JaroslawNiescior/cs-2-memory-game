@@ -1,66 +1,16 @@
-interface CS2_Skin {
-  id: string
-  name: string
-  description: string
-  weapon: {
-    id: string
-    name: string
-  }
-  category: {
-    id: string
-    name: string
-  }
-  pattern: {
-    id: string
-    name: string
-  }
-  min_float: number
-  max_float: number
-  rarity: {
-    id: string
-    name: string
-    color: string
-  }
-  stattrak: boolean
-  souvenir: boolean
-  image: string
-  team: {
-    id: string
-    name: string
-  } | null
-  crates: Array<{
-    id: string
-    name: string
-    image: string
-  }>
-  collections: Array<{
-    id: string
-    name: string
-    image: string
-  }>
-}
+import type { CS2ApiResponse, CS2Skin } from '~/types/game'
 
-interface CSGOApiResponse {
-  success: boolean
-  data?: CS2_Skin[]
-  cached?: boolean
-  timestamp?: number
-  total_available?: number
-  error?: string
-  message?: string
-}
-
-export function useCS2_Skins() {
-  const loading = ref(false)
+export function useCS2Skins() {
+  const isLoading = ref(false)
   const error = ref<string | null>(null)
-  const skins = ref<CS2_Skin[]>([])
+  const skins = ref<CS2Skin[]>([])
 
   const fetchRandomSkins = async (count: number = 10) => {
-    loading.value = true
+    isLoading.value = true
     error.value = null
 
     try {
-      const response = await $fetch<CSGOApiResponse>('/api/csgo-skins', {
+      const response = await $fetch<CS2ApiResponse>('/api/csgo-skins', {
         query: { count },
       })
 
@@ -78,7 +28,7 @@ export function useCS2_Skins() {
       return []
     }
     finally {
-      loading.value = false
+      isLoading.value = false
     }
   }
 
@@ -103,7 +53,7 @@ export function useCS2_Skins() {
     }
   }
 
-  const transformSkinsForGame = (skins: CS2_Skin[], pairCount: number = 8) => {
+  const transformSkinsForGame = (skins: CS2Skin[], pairCount: number = 8) => {
     const selectedSkins = skins.slice(0, pairCount)
     const pairs = [...selectedSkins, ...selectedSkins]
 
@@ -120,7 +70,7 @@ export function useCS2_Skins() {
   }
 
   return {
-    loading: readonly(loading),
+    loading: readonly(isLoading),
     error: readonly(error),
     skins: readonly(skins),
     fetchRandomSkins,
