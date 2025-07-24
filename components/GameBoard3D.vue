@@ -103,14 +103,12 @@ function initThree() {
   )
   camera.position.set(0, 0, 8)
 
-  // Renderer
   renderer = new THREE.WebGLRenderer({ antialias: true })
   renderer.setSize(containerRef.value.clientWidth, containerRef.value.clientHeight)
   renderer.shadowMap.enabled = true
   renderer.shadowMap.type = THREE.PCFSoftShadowMap
   containerRef.value.appendChild(renderer.domElement)
 
-  // Oświetlenie
   const ambientLight = new THREE.AmbientLight(0xFFFFFF, 0.6)
   scene.add(ambientLight)
 
@@ -304,17 +302,15 @@ function onWindowResize() {
 function animate() {
   animationId = requestAnimationFrame(animate)
 
-  scene.rotation.y += 0.001
+  scene.rotation.y += 0.0001
 
   renderer.render(scene, camera)
 }
 
-// Restart gry
 function restartGame() {
   initializeGame()
 }
 
-// Cleanup
 onUnmounted(() => {
   if (animationId) {
     cancelAnimationFrame(animationId)
@@ -326,7 +322,6 @@ onUnmounted(() => {
   }
 })
 
-// Inicjalizacja przy mounted
 onMounted(() => {
   nextTick(() => {
     initThree()
