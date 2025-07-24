@@ -1,5 +1,5 @@
 <script setup lang="ts">
-interface CSGOSkin {
+interface CS2_Skin {
   id: string
   name: string
   description: string
@@ -35,7 +35,7 @@ interface GameCard {
   id: number
   value: string
   image: string
-  skin: CSGOSkin
+  skin: CS2_Skin
   isFlipped: boolean
   isMatched: boolean
 }
@@ -61,7 +61,7 @@ const {
   clearCache,
   getCacheInfo,
   transformSkinsForGame,
-} = useCSGOSkins()
+} = useCS2_Skins()
 
 const cacheInfo = ref<CacheInfo | null>(null)
 const gameCards = ref<GameCard[]>([])

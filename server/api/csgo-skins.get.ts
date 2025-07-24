@@ -1,4 +1,4 @@
-interface CSGOSkin {
+interface CS2_Skin {
   id: string
   name: string
   description: string
@@ -41,7 +41,7 @@ interface CSGOSkin {
 }
 
 interface CachedData {
-  allSkins: CSGOSkin[]
+  allSkins: CS2_Skin[]
   timestamp: number
 }
 
@@ -51,7 +51,7 @@ const CACHE_DURATION = 60 * 60 * 1000
 const CSGO_API_BASE = 'https://bymykel.github.io/CSGO-API/api/en'
 const ALL_SKINS_CACHE_KEY = 'all_skins'
 
-async function fetchAllSkins(): Promise<CSGOSkin[]> {
+async function fetchAllSkins(): Promise<CS2_Skin[]> {
   try {
     const response = await fetch(`${CSGO_API_BASE}/skins.json`)
     if (!response.ok) {
@@ -65,7 +65,7 @@ async function fetchAllSkins(): Promise<CSGOSkin[]> {
   }
 }
 
-async function getCachedOrFetchAllSkins(): Promise<CSGOSkin[]> {
+async function getCachedOrFetchAllSkins(): Promise<CS2_Skin[]> {
   const cachedData = cache.get(ALL_SKINS_CACHE_KEY)
 
   if (cachedData && isCacheValid(cachedData)) {
@@ -83,12 +83,12 @@ async function getCachedOrFetchAllSkins(): Promise<CSGOSkin[]> {
   return allSkins
 }
 
-function getRandomSkins(skins: CSGOSkin[], count: number = 10): CSGOSkin[] {
+function getRandomSkins(skins: CS2_Skin[], count: number = 10): CS2_Skin[] {
   const validSkins = skins.filter(skin => skin.image && skin.image.length > 0)
 
-  const skinsByWeapon = new Map<string, CSGOSkin[]>()
+  const skinsByWeapon = new Map<string, CS2_Skin[]>()
 
-  validSkins.forEach((skin: CSGOSkin) => {
+  validSkins.forEach((skin: CS2_Skin) => {
     const weaponId = skin.weapon.id
     if (!skinsByWeapon.has(weaponId)) {
       skinsByWeapon.set(weaponId, [])
@@ -96,7 +96,7 @@ function getRandomSkins(skins: CSGOSkin[], count: number = 10): CSGOSkin[] {
     skinsByWeapon.get(weaponId)!.push(skin)
   })
 
-  const uniqueWeaponSkins: CSGOSkin[] = []
+  const uniqueWeaponSkins: CS2_Skin[] = []
   const weaponIds = Array.from(skinsByWeapon.keys())
 
   const shuffledWeaponIds = weaponIds.sort(() => 0.5 - Math.random())
